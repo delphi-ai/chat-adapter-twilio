@@ -1,7 +1,7 @@
 {
   "name": "chat-adapter-twilio",
   "version": "0.1.0",
-  "description": "Twilio (SMS / MMS / WhatsApp via Twilio) adapter for the Vercel Chat SDK.",
+  "description": "Twilio SMS adapter for the Vercel Chat SDK.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -21,9 +21,17 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "keywords": ["chat-sdk", "chat-adapter", "twilio", "sms", "mms", "whatsapp", "bot"],
+  "keywords": ["chat-sdk", "chat-adapter", "twilio", "sms", "bot"],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/delphi-ai/chat-adapter-twilio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/delphi-ai/chat-adapter-twilio/issues"
+  },
+  "homepage": "https://github.com/delphi-ai/chat-adapter-twilio#readme",
   "publishConfig": {
     "access": "public"
   },

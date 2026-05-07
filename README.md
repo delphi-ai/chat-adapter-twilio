@@ -7,7 +7,7 @@ Twilio adapter for the [Vercel Chat SDK](https://chat-sdk.dev/) — write your b
 ## Install
 
 ```bash
-pnpm add chat chat-adapter-twilio twilio
+pnpm add chat github:delphi-ai/chat-adapter-twilio twilio
 ```
 
 You'll also need a state adapter (see [chat-sdk.dev/state](https://chat-sdk.dev/)):
