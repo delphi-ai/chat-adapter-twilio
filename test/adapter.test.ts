@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createHmac } from "node:crypto";
-import { ConsoleLogger, type ChatInstance } from "chat";
+import { ConsoleLogger, NotImplementedError, type ChatInstance } from "chat";
+import { AdapterRateLimitError } from "@chat-adapter/shared";
 import { TwilioAdapter } from "../src/adapter";
 import { encodeTwilioThreadId } from "../src/thread-id";
+import { createTwilioAdapter } from "../src/factory";
 
 const AUTH_TOKEN = "test-auth-token-deadbeef";
 const ACCOUNT_SID = "AC_TEST_ACCOUNT_SID";
@@ -180,34 +182,43 @@ describe("TwilioAdapter unsupported operations", () => {
     });
   });
 
-  it("throws when editMessage is called (Twilio doesn't support edits)", async () => {
+  it("throws NotImplementedError when editMessage is called (Twilio doesn't support edits)", async () => {
     const threadId = encodeTwilioThreadId({
       channel: "sms",
       botAddress: FROM_NUMBER,
       userAddress: "+15557654321",
     });
     await expect(adapter.editMessage(threadId, "SM123", "new text")).rejects.toThrow(
+      NotImplementedError,
+    );
+    await expect(adapter.editMessage(threadId, "SM123", "new text")).rejects.toThrow(
       /not support.*edit/i,
     );
   });
 
-  it("throws when deleteMessage is called", async () => {
+  it("throws NotImplementedError when deleteMessage is called", async () => {
     const threadId = encodeTwilioThreadId({
       channel: "sms",
       botAddress: FROM_NUMBER,
       userAddress: "+15557654321",
     });
     await expect(adapter.deleteMessage(threadId, "SM123")).rejects.toThrow(
+      NotImplementedError,
+    );
+    await expect(adapter.deleteMessage(threadId, "SM123")).rejects.toThrow(
       /not support.*delet/i,
     );
   });
 
-  it("throws when addReaction is called on an SMS thread", async () => {
+  it("throws NotImplementedError when addReaction is called on an SMS thread", async () => {
     const threadId = encodeTwilioThreadId({
       channel: "sms",
       botAddress: FROM_NUMBER,
       userAddress: "+15557654321",
     });
+    await expect(
+      adapter.addReaction(threadId, "SM123", "thumbs_up"),
+    ).rejects.toThrow(NotImplementedError);
     await expect(
       adapter.addReaction(threadId, "SM123", "thumbs_up"),
     ).rejects.toThrow(/sms/i);
@@ -241,6 +252,128 @@ describe("TwilioAdapter.stream (no native streaming)", () => {
     expect(fake.create).toHaveBeenCalledWith(
       expect.objectContaining({ body: "Hello streaming world" }),
     );
+  });
+});
+
+describe("TwilioAdapter.postMessage — outbound MMS", () => {
+  it("passes mediaUrl when message has file attachments with url", async () => {
+    const fake = makeFakeTwilioClient();
+    const adapter = new TwilioAdapter({
+      accountSid: ACCOUNT_SID,
+      authToken: AUTH_TOKEN,
+      fromNumber: FROM_NUMBER,
+      twilioClient: fake.client as never,
+      logger: new ConsoleLogger("silent"),
+    });
+    const threadId = encodeTwilioThreadId({
+      channel: "sms",
+      botAddress: FROM_NUMBER,
+      userAddress: "+15557654321",
+    });
+
+    const message = {
+      raw: "Check this out",
+      files: [
+        { url: "https://example.com/image1.jpg", filename: "image1.jpg" },
+        { url: "https://example.com/image2.png", filename: "image2.png" },
+      ],
+    };
+    await adapter.postMessage(threadId, message as never);
+    expect(fake.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mediaUrl: [
+          "https://example.com/image1.jpg",
+          "https://example.com/image2.png",
+        ],
+      }),
+    );
+  });
+
+  it("does not include mediaUrl when message has no file attachments", async () => {
+    const fake = makeFakeTwilioClient();
+    const adapter = new TwilioAdapter({
+      accountSid: ACCOUNT_SID,
+      authToken: AUTH_TOKEN,
+      fromNumber: FROM_NUMBER,
+      twilioClient: fake.client as never,
+      logger: new ConsoleLogger("silent"),
+    });
+    const threadId = encodeTwilioThreadId({
+      channel: "sms",
+      botAddress: FROM_NUMBER,
+      userAddress: "+15557654321",
+    });
+    await adapter.postMessage(threadId, "plain text");
+    const callArgs = fake.create.mock.calls[0][0];
+    expect(callArgs).not.toHaveProperty("mediaUrl");
+  });
+});
+
+describe("TwilioAdapter.postMessage — API error mapping", () => {
+  let fake: ReturnType<typeof makeFakeTwilioClient>;
+  let adapter: TwilioAdapter;
+
+  beforeEach(() => {
+    fake = makeFakeTwilioClient();
+    adapter = new TwilioAdapter({
+      accountSid: ACCOUNT_SID,
+      authToken: AUTH_TOKEN,
+      fromNumber: FROM_NUMBER,
+      twilioClient: fake.client as never,
+      logger: new ConsoleLogger("silent"),
+    });
+  });
+
+  it("throws AdapterRateLimitError when client throws a 429-like error", async () => {
+    const rateLimitErr = Object.assign(new Error("Rate limit exceeded"), {
+      status: 429,
+    });
+    fake.create.mockRejectedValueOnce(rateLimitErr);
+
+    const threadId = encodeTwilioThreadId({
+      channel: "sms",
+      botAddress: FROM_NUMBER,
+      userAddress: "+15557654321",
+    });
+
+    await expect(adapter.postMessage(threadId, "hi")).rejects.toThrow(
+      AdapterRateLimitError,
+    );
+  });
+
+  it("wraps non-RestException errors in NetworkError", async () => {
+    fake.create.mockRejectedValueOnce(new Error("Connection refused"));
+    const { NetworkError: NE } = await import("@chat-adapter/shared");
+
+    const threadId = encodeTwilioThreadId({
+      channel: "sms",
+      botAddress: FROM_NUMBER,
+      userAddress: "+15557654321",
+    });
+
+    await expect(adapter.postMessage(threadId, "hi")).rejects.toThrow(NE);
+  });
+});
+
+describe("createTwilioAdapter factory — deferred sender validation", () => {
+  it("constructs without throwing when neither fromNumber nor whatsappFromNumber is set", () => {
+    // Clear env vars to ensure neither is set via env
+    const originalFrom = process.env.TWILIO_FROM_NUMBER;
+    const originalWhatsapp = process.env.TWILIO_WHATSAPP_FROM;
+    delete process.env.TWILIO_FROM_NUMBER;
+    delete process.env.TWILIO_WHATSAPP_FROM;
+
+    try {
+      expect(() =>
+        createTwilioAdapter({
+          accountSid: ACCOUNT_SID,
+          authToken: AUTH_TOKEN,
+        }),
+      ).not.toThrow();
+    } finally {
+      if (originalFrom !== undefined) process.env.TWILIO_FROM_NUMBER = originalFrom;
+      if (originalWhatsapp !== undefined) process.env.TWILIO_WHATSAPP_FROM = originalWhatsapp;
+    }
   });
 });
 

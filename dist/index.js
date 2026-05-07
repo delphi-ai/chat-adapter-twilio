@@ -1,7 +1,16 @@
 // src/adapter.ts
-import { extractCard, ValidationError as ValidationError2 } from "@chat-adapter/shared";
 import {
-  ConsoleLogger
+  extractCard,
+  extractFiles,
+  ValidationError as ValidationError2,
+  AuthenticationError,
+  AdapterRateLimitError,
+  NetworkError,
+  PermissionError
+} from "@chat-adapter/shared";
+import {
+  ConsoleLogger,
+  NotImplementedError
 } from "chat";
 import twilio from "twilio";
 
@@ -336,11 +345,34 @@ var TwilioAdapter = class {
     const converter = new TwilioFormatConverter(channel);
     const body = card ? converter.renderPostable({ card }) : converter.renderPostable(message);
     const from = this.resolveFrom(channel, botAddress);
-    const response = await this.client.messages.create({
-      from,
-      to: userAddress,
-      body
-    });
+    const files = extractFiles(message);
+    const mediaUrls = files.filter((f) => "url" in f && typeof f.url === "string").map((f) => f.url);
+    let response;
+    try {
+      response = await this.client.messages.create({
+        from,
+        to: userAddress,
+        body,
+        ...mediaUrls.length > 0 ? { mediaUrl: mediaUrls } : {}
+      });
+    } catch (err) {
+      const originalError = err instanceof Error ? err : void 0;
+      const status = isTwilioLikeError(err) ? err.status : void 0;
+      if (status === 401) {
+        throw new AuthenticationError(ADAPTER_NAME2, originalError?.message);
+      }
+      if (status === 403) {
+        throw new PermissionError(ADAPTER_NAME2, "send message");
+      }
+      if (status === 429) {
+        throw new AdapterRateLimitError(ADAPTER_NAME2);
+      }
+      throw new NetworkError(
+        ADAPTER_NAME2,
+        originalError?.message ?? String(err),
+        originalError
+      );
+    }
     const synthParams = {
       MessageSid: response.sid,
       AccountSid: "",
@@ -358,15 +390,19 @@ var TwilioAdapter = class {
    * Twilio doesn't support editing SMS/MMS/WhatsApp messages.
    */
   async editMessage(_threadId, _messageId, _message) {
-    throw new Error(
-      "Twilio does not support editing messages. Send a new message instead."
+    throw new NotImplementedError(
+      "Twilio does not support editing messages. Send a new message instead.",
+      "editMessage"
     );
   }
   /**
    * Twilio doesn't support deleting SMS/MMS/WhatsApp messages once sent.
    */
   async deleteMessage(_threadId, _messageId) {
-    throw new Error("Twilio does not support deleting messages.");
+    throw new NotImplementedError(
+      "Twilio does not support deleting messages.",
+      "deleteMessage"
+    );
   }
   /**
    * Buffer all chunks then post once. SMS/WhatsApp via Twilio have no
@@ -388,10 +424,14 @@ var TwilioAdapter = class {
   async addReaction(threadId, _messageId, _emoji) {
     const { channel } = decodeTwilioThreadId(threadId);
     if (channel === "sms") {
-      throw new Error("Reactions are not supported on SMS via Twilio.");
+      throw new NotImplementedError(
+        "Reactions are not supported on SMS via Twilio.",
+        "addReaction"
+      );
     }
-    throw new Error(
-      "Reactions are not supported by the Twilio Programmable Messaging API."
+    throw new NotImplementedError(
+      "Reactions are not supported by the Twilio Programmable Messaging API.",
+      "addReaction"
     );
   }
   async removeReaction(threadId, messageId, emoji) {
@@ -469,6 +509,9 @@ var TwilioAdapter = class {
     return this.fromNumber;
   }
 };
+function isTwilioLikeError(err) {
+  return typeof err === "object" && err !== null && "status" in err && typeof err.status === "number";
+}
 function parseFormBody(body) {
   const search = new URLSearchParams(body);
   const out = {};
@@ -497,12 +540,6 @@ function createTwilioAdapter(config) {
   }
   const fromNumber = config?.fromNumber ?? process.env.TWILIO_FROM_NUMBER;
   const whatsappFromNumber = config?.whatsappFromNumber ?? process.env.TWILIO_WHATSAPP_FROM;
-  if (!fromNumber && !whatsappFromNumber) {
-    throw new ValidationError3(
-      "twilio",
-      "At least one of fromNumber (SMS) or whatsappFromNumber (WhatsApp) must be configured."
-    );
-  }
   const ctorConfig = {
     accountSid,
     authToken,

@@ -45,12 +45,6 @@ export function createTwilioAdapter(
   const fromNumber = config?.fromNumber ?? process.env.TWILIO_FROM_NUMBER;
   const whatsappFromNumber =
     config?.whatsappFromNumber ?? process.env.TWILIO_WHATSAPP_FROM;
-  if (!fromNumber && !whatsappFromNumber) {
-    throw new ValidationError(
-      "twilio",
-      "At least one of fromNumber (SMS) or whatsappFromNumber (WhatsApp) must be configured.",
-    );
-  }
 
   const ctorConfig: TwilioAdapterCtorConfig = {
     accountSid,

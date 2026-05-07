@@ -1,7 +1,16 @@
-import { extractCard, ValidationError } from "@chat-adapter/shared";
+import {
+  extractCard,
+  extractFiles,
+  ValidationError,
+  AuthenticationError,
+  AdapterRateLimitError,
+  NetworkError,
+  PermissionError,
+} from "@chat-adapter/shared";
 import {
   ConsoleLogger,
   Message,
+  NotImplementedError,
   type Adapter,
   type AdapterPostableMessage,
   type ChatInstance,
@@ -196,11 +205,38 @@ export class TwilioAdapter
       : converter.renderPostable(message);
 
     const from = this.resolveFrom(channel, botAddress);
-    const response = await this.client.messages.create({
-      from,
-      to: userAddress,
-      body,
-    });
+
+    const files = extractFiles(message);
+    const mediaUrls = files
+      .filter((f): f is typeof f & { url: string } => "url" in f && typeof (f as { url?: unknown }).url === "string")
+      .map((f) => (f as { url: string }).url);
+
+    let response: { sid: string; [k: string]: unknown };
+    try {
+      response = await this.client.messages.create({
+        from,
+        to: userAddress,
+        body,
+        ...(mediaUrls.length > 0 ? { mediaUrl: mediaUrls } : {}),
+      });
+    } catch (err) {
+      const originalError = err instanceof Error ? err : undefined;
+      const status = isTwilioLikeError(err) ? err.status : undefined;
+      if (status === 401) {
+        throw new AuthenticationError(ADAPTER_NAME, originalError?.message);
+      }
+      if (status === 403) {
+        throw new PermissionError(ADAPTER_NAME, "send message");
+      }
+      if (status === 429) {
+        throw new AdapterRateLimitError(ADAPTER_NAME);
+      }
+      throw new NetworkError(
+        ADAPTER_NAME,
+        originalError?.message ?? String(err),
+        originalError,
+      );
+    }
 
     const synthParams: TwilioInboundParams = {
       MessageSid: response.sid,
@@ -225,8 +261,9 @@ export class TwilioAdapter
     _messageId: string,
     _message: AdapterPostableMessage,
   ): Promise<RawMessage<TwilioRawMessage>> {
-    throw new Error(
+    throw new NotImplementedError(
       "Twilio does not support editing messages. Send a new message instead.",
+      "editMessage",
     );
   }
 
@@ -237,7 +274,10 @@ export class TwilioAdapter
     _threadId: string,
     _messageId: string,
   ): Promise<void> {
-    throw new Error("Twilio does not support deleting messages.");
+    throw new NotImplementedError(
+      "Twilio does not support deleting messages.",
+      "deleteMessage",
+    );
   }
 
   /**
@@ -271,13 +311,17 @@ export class TwilioAdapter
   ): Promise<void> {
     const { channel } = decodeTwilioThreadId(threadId);
     if (channel === "sms") {
-      throw new Error("Reactions are not supported on SMS via Twilio.");
+      throw new NotImplementedError(
+        "Reactions are not supported on SMS via Twilio.",
+        "addReaction",
+      );
     }
     // WhatsApp via Twilio does support reactions via the Conversations API,
     // but the public Programmable Messaging API does not. For now we throw
     // a clearer error so callers know to handle it.
-    throw new Error(
+    throw new NotImplementedError(
       "Reactions are not supported by the Twilio Programmable Messaging API.",
+      "addReaction",
     );
   }
 
@@ -385,6 +429,20 @@ export class TwilioAdapter
     }
     return this.fromNumber;
   }
+}
+
+/**
+ * Duck-type check for Twilio RestException and compatible error shapes.
+ * Both real `twilio.RestException` instances and test fakes with a numeric
+ * `status` property satisfy this contract.
+ */
+function isTwilioLikeError(err: unknown): err is { status: number; message?: string } {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "status" in err &&
+    typeof (err as { status: unknown }).status === "number"
+  );
 }
 
 function parseFormBody(body: string): TwilioInboundParams {
