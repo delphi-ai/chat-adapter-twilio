@@ -96,23 +96,22 @@ describe("verifyTwilioSignature", () => {
     ).toBe(false);
   });
 
-  it("verifies WhatsApp-channel parameters (with whatsapp: prefixes)", () => {
-    const waParams = {
+  it("verifies SMS parameters with extra metadata", () => {
+    const smsParams = {
       MessageSid: "SM_TEST_MESSAGE_SID",
       AccountSid: "AC_TEST_ACCOUNT_SID",
-      From: "whatsapp:+15557654321",
-      To: "whatsapp:+14155238886",
-      Body: "Hi from WhatsApp",
-      ProfileName: "Alice",
-      WaId: "15557654321",
+      From: "+15557654321",
+      To: "+15551234567",
+      Body: "Hi from SMS",
+      NumMedia: "0",
     };
-    const signature = signTwilio(AUTH_TOKEN, url, waParams);
+    const signature = signTwilio(AUTH_TOKEN, url, smsParams);
     expect(
       verifyTwilioSignature({
         authToken: AUTH_TOKEN,
         signature,
         url,
-        body: formBody(waParams),
+        body: formBody(smsParams),
       }),
     ).toBe(true);
   });

@@ -5,7 +5,7 @@ import { decodeTwilioThreadId } from "../src/thread-id";
 describe("parseTwilioInbound", () => {
   it("parses a plain SMS into a Message", () => {
     const params = {
-      MessageSid: "SM_TEST_MESSAGE_SID",
+      MessageSid: "SM_TEST_MESSAGE_SID_1",
       AccountSid: "AC_TEST_ACCOUNT_SID",
       From: "+15557654321",
       To: "+15551234567",
@@ -15,7 +15,7 @@ describe("parseTwilioInbound", () => {
 
     const result = parseTwilioInbound(params);
 
-    expect(result.message.id).toBe("SM_TEST_MESSAGE_SID");
+    expect(result.message.id).toBe("SM_TEST_MESSAGE_SID_1");
     expect(result.message.text).toBe("Hello, bot!");
     expect(result.message.author.userId).toBe("+15557654321");
     expect(result.message.author.userName).toBe("+15557654321");
@@ -32,7 +32,7 @@ describe("parseTwilioInbound", () => {
 
   it("attaches MMS media as image attachments", () => {
     const params = {
-      MessageSid: "MM_TEST_MESSAGE_SID",
+      MessageSid: "MM_TEST_MESSAGE_SID_1",
       AccountSid: "AC_TEST_ACCOUNT_SID",
       From: "+15557654321",
       To: "+15551234567",
@@ -61,7 +61,7 @@ describe("parseTwilioInbound", () => {
 
   it("uses ProfileName for WhatsApp messages and infers the whatsapp channel", () => {
     const params = {
-      MessageSid: "SM_TEST_MESSAGE_SID",
+      MessageSid: "SM_TEST_MESSAGE_SID_2",
       AccountSid: "AC_TEST_ACCOUNT_SID",
       From: "whatsapp:+15557654321",
       To: "whatsapp:+14155238886",
@@ -86,7 +86,7 @@ describe("parseTwilioInbound", () => {
 
   it("renders a WhatsApp button press as the button text in the body", () => {
     const params = {
-      MessageSid: "SM_TEST_MESSAGE_SID",
+      MessageSid: "SM_TEST_MESSAGE_SID_3",
       AccountSid: "AC_TEST_ACCOUNT_SID",
       From: "whatsapp:+15557654321",
       To: "whatsapp:+14155238886",
@@ -106,7 +106,7 @@ describe("parseTwilioInbound", () => {
 
   it("renders a shared location as a synthetic body with lat/lng", () => {
     const params = {
-      MessageSid: "SM_TEST_MESSAGE_SID",
+      MessageSid: "SM_TEST_MESSAGE_SID_4",
       AccountSid: "AC_TEST_ACCOUNT_SID",
       From: "whatsapp:+15557654321",
       To: "whatsapp:+14155238886",
@@ -126,7 +126,7 @@ describe("parseTwilioInbound", () => {
 
   it("preserves the raw payload on Message.raw for escape-hatch access", () => {
     const params = {
-      MessageSid: "SM_TEST_MESSAGE_SID",
+      MessageSid: "SM_TEST_MESSAGE_SID_5",
       AccountSid: "AC_TEST_ACCOUNT_SID",
       From: "+15557654321",
       To: "+15551234567",
