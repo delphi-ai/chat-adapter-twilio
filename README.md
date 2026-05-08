@@ -7,7 +7,7 @@ Twilio adapter for the [Vercel Chat SDK](https://chat-sdk.dev/) — write your b
 ## Install
 
 ```bash
-pnpm add chat github:delphi-ai/chat-adapter-twilio twilio
+pnpm add chat chat-adapter-twilio twilio
 ```
 
 You'll also need a state adapter (see [chat-sdk.dev/state](https://chat-sdk.dev/)):
@@ -93,7 +93,7 @@ Inbound webhooks are verified using the [official `twilio.validateRequest`](http
 ## Tests
 
 ```bash
-pnpm test         # vitest run, 45 tests
+pnpm test         # vitest run, 47 tests
 pnpm typecheck    # tsc --noEmit
 pnpm build        # tsup → dist/
 ```
