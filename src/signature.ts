@@ -1,4 +1,4 @@
-import { validateRequest } from "twilio";
+import twilio from "twilio";
 
 export interface VerifySignatureInput {
   authToken: string;
@@ -39,5 +39,5 @@ export function verifyTwilioSignature({
   for (const [key, value] of search) {
     params[key] = value;
   }
-  return validateRequest(authToken, signature, url, params);
+  return twilio.validateRequest(authToken, signature, url, params);
 }

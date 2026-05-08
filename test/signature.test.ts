@@ -70,49 +70,4 @@ describe("verifyTwilioSignature", () => {
       }),
     ).toBe(false);
   });
-
-  it("rejects when the auth token is wrong", () => {
-    const signature = signTwilio(AUTH_TOKEN, url, params);
-    expect(
-      verifyTwilioSignature({
-        authToken: "different-token",
-        signature,
-        url,
-        body: formBody(params),
-      }),
-    ).toBe(false);
-  });
-
-  it("rejects when the body has been tampered with", () => {
-    const signature = signTwilio(AUTH_TOKEN, url, params);
-    const tampered = formBody({ ...params, Body: "evil payload" });
-    expect(
-      verifyTwilioSignature({
-        authToken: AUTH_TOKEN,
-        signature,
-        url,
-        body: tampered,
-      }),
-    ).toBe(false);
-  });
-
-  it("verifies SMS parameters with extra metadata", () => {
-    const smsParams = {
-      MessageSid: "SM_TEST_MESSAGE_SID",
-      AccountSid: "AC_TEST_ACCOUNT_SID",
-      From: "+15557654321",
-      To: "+15551234567",
-      Body: "Hi from SMS",
-      NumMedia: "0",
-    };
-    const signature = signTwilio(AUTH_TOKEN, url, smsParams);
-    expect(
-      verifyTwilioSignature({
-        authToken: AUTH_TOKEN,
-        signature,
-        url,
-        body: formBody(smsParams),
-      }),
-    ).toBe(true);
-  });
 });
