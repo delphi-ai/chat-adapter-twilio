@@ -56,6 +56,16 @@ export interface TwilioMessagingClient {
       messagingServiceSid?: string;
     }): Promise<{ sid: string; [k: string]: unknown }>;
   };
+  messaging?: {
+    v2?: {
+      typingIndicator?: {
+        create(opts: {
+          channel: "whatsapp";
+          messageId: string;
+        }): Promise<{ success: boolean; [k: string]: unknown }>;
+      };
+    };
+  };
 }
 
 /**
@@ -101,6 +111,7 @@ export class TwilioAdapter
   private readonly skipValidation: boolean;
   private readonly logger: Logger;
   private readonly client: TwilioMessagingClient;
+  private readonly latestInboundMessageSidByThread = new Map<string, string>();
   private chat: ChatInstance | null = null;
 
   constructor(config: TwilioAdapterCtorConfig) {
@@ -176,7 +187,10 @@ export class TwilioAdapter
     }
 
     try {
-      const { threadId, message } = parseTwilioInbound(params);
+      const { threadId, channel, message } = parseTwilioInbound(params);
+      if (channel === "whatsapp") {
+        this.latestInboundMessageSidByThread.set(threadId, params.MessageSid);
+      }
       this.chat.processMessage(this, threadId, message, options);
     } catch (error) {
       this.logger.error("Failed to process Twilio webhook", { error });
@@ -300,8 +314,19 @@ export class TwilioAdapter
     return this.postMessage(threadId, accumulated);
   }
 
-  async startTyping(_threadId: string, _status?: string): Promise<void> {
-    // Twilio has no typing-indicator API for SMS or WhatsApp via Twilio.
+  async startTyping(threadId: string, _status?: string): Promise<void> {
+    const { channel } = decodeTwilioThreadId(threadId);
+    if (channel !== "whatsapp") return;
+
+    const messageSid = this.latestInboundMessageSidByThread.get(threadId);
+    if (!messageSid) {
+      this.logger.debug?.("No inbound WhatsApp message SID available for typing indicator", {
+        threadId,
+      });
+      return;
+    }
+
+    await this.sendWhatsAppTypingIndicator(messageSid);
   }
 
   async addReaction(
@@ -428,6 +453,23 @@ export class TwilioAdapter
       );
     }
     return this.fromNumber;
+  }
+
+  private async sendWhatsAppTypingIndicator(messageSid: string): Promise<void> {
+    try {
+      const response = await this.client.messaging?.v2?.typingIndicator?.create({
+        channel: "whatsapp",
+        messageId: messageSid,
+      });
+
+      if (!response?.success) {
+        this.logger.warn("Failed to send WhatsApp typing indicator", {
+          success: response?.success,
+        });
+      }
+    } catch (error) {
+      this.logger.warn("Failed to send WhatsApp typing indicator", { error });
+    }
   }
 }
 
